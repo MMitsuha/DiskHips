@@ -35,9 +35,6 @@ FSDHook::StartHook(
 	if (!puniDriverName || !CurFunc || FuncSubscript >= IRP_MJ_MAXIMUM_FUNCTION)
 		return STATUS_INVALID_PARAMETER;
 
-	if (pDriverObject || OriFunc)
-		return STATUS_ALREADY_COMPLETE;
-
 	NTSTATUS ntStatus = STATUS_UNSUCCESSFUL;
 
 	TRY_START
@@ -46,7 +43,7 @@ FSDHook::StartHook(
 	if (NT_SUCCESS(ntStatus))
 	{
 		OriFunc = (IRP_MJ_SERIES)InterlockedExchange64((PLONG64)(&pDriverObject->MajorFunction[FuncSubscript]), (LONG64)CurFunc);
-		CurerntFunc = CurFunc;
+		CurrentFunc = CurFunc;
 		Subscript = FuncSubscript;
 	}
 	else
@@ -90,14 +87,14 @@ FSDHook::RestartHook(
 	VOID
 )
 {
-	if (!pDriverObject || !CurerntFunc || Subscript >= IRP_MJ_MAXIMUM_FUNCTION)
+	if (!pDriverObject || !CurrentFunc || Subscript >= IRP_MJ_MAXIMUM_FUNCTION)
 		return STATUS_INVALID_PARAMETER;
 
 	NTSTATUS ntStatus = STATUS_UNSUCCESSFUL;
 
 	TRY_START
 
-		if (InterlockedExchange64((PLONG64)(&(pDriverObject->MajorFunction[Subscript])), (LONG64)CurerntFunc))
+		if (InterlockedExchange64((PLONG64)(&(pDriverObject->MajorFunction[Subscript])), (LONG64)CurrentFunc))
 			ntStatus = STATUS_SUCCESS;
 
 	TRY_END(ntStatus)
@@ -117,6 +114,7 @@ FSDHook::ClearAll(
 		}
 
 	OriFunc = NULL;
+	CurrentFunc = NULL;
 	Subscript = IRP_MJ_MAXIMUM_FUNCTION;
 
 	TRY_END_NOSTATUS

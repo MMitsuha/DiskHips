@@ -60,6 +60,6 @@ private:
 
 	PDRIVER_OBJECT pDriverObject;
 	IRP_MJ_SERIES OriFunc;
-	IRP_MJ_SERIES CurerntFunc;
+	IRP_MJ_SERIES CurrentFunc;
 	SHORT Subscript;
 };

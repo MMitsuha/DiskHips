@@ -1,6 +1,7 @@
 #include "Main.hpp"
 #include "Functions.hpp"
 #include <list>
+#include <sstream>
 #include <algorithm>
 
 BOOLEAN
@@ -162,8 +163,31 @@ main(
 											BringWindowToTop(hWnd);
 											SetActiveWindow(hWnd);
 											SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-											cout << "是否拦截(1 拦截/0 放行):" << flush;
-											cin >> IsRebused;
+											//cout << "是否拦截(1 拦截/0 放行):" << flush;
+											//cin >> IsRebused;
+											wstringstream Info;
+											Info << L"有程序试图修改禁止扇区,请打开主程序查看详情!" << endl << endl;
+											Info << L"------------------------------" << endl;
+											if (UserBuffer.hProcID == (HANDLE)0 || UserBuffer.hProcID == (HANDLE)4)
+												Info << L"进程名: " << L"System" << endl;
+											else
+												Info << L"进程名: " << UserBuffer.wstrProcessName << endl;
+											cout << L"PID: " << (UINT64)UserBuffer.hProcID << endl;
+											if (UserBuffer.hProcID == (HANDLE)0 || UserBuffer.hProcID == (HANDLE)4)
+												Info << L"进程路径: " << L"System" << endl;
+											else
+											{
+												WCHAR DosPath[MAX_PATH + 4] = { 0 };
+												NtPathToDosPathW(UserBuffer.wstrNTProcessPath, DosPath);
+												Info << L"进程路径: " << DosPath << endl;
+											}
+											Info << L"相对扇区偏移(字节): " << UserBuffer.Offset % 512 << endl;
+											Info << L"扇区(512字节): " << UserBuffer.Offset / 512 << endl;
+											Info << L"长度(字节): " << UserBuffer.Length << endl << endl;
+											Info << L"(Yes: 拦截/No: 放行)" << flush;
+											if (!Info.fail())
+												if (MessageBoxW(hWnd, Info.str().c_str(), L"WARNING", MB_ICONWARNING | MB_YESNO | MB_SYSTEMMODAL) == IDNO)
+													IsRebused = 48;
 										}
 										DeviceIoControl(hDriver, WRITE_DISKHIPS_DATA, &IsRebused, sizeof(IsRebused), NULL, 0, &ReturnedLength, NULL);
 										break;
