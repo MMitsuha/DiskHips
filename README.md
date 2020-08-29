@@ -1,3 +1,3 @@
-#DiskHips
-#Protect critical sectors of the hard disk.
+# DiskHips
+# Protect critical sectors of the hard disk.
 ------------------------
