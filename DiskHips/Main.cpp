@@ -543,7 +543,7 @@ DriverEntry(
 			for (SHORT i = 0; i < IRP_MJ_MAXIMUM_FUNCTION + 1; i++)
 				pDriverObject->MajorFunction[i] = DefaultDispatch;
 			pDriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = IoControlDispatch;
-			pDriverObject->MajorFunction[IRP_MJ_CLOSE] = pDriverObject->MajorFunction[IRP_MJ_CLEANUP] = CloseDispatch;
+			/*pDriverObject->MajorFunction[IRP_MJ_CLOSE] = */pDriverObject->MajorFunction[IRP_MJ_CLEANUP] = CloseDispatch;
 			pDriverObject->DriverUnload = DriverUnload;
 		} while (FALSE);
 

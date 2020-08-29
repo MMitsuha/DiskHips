@@ -42,6 +42,12 @@ public:
 		);
 
 	virtual
+		NTSTATUS
+		RestartHook(
+			VOID
+		);
+
+	virtual
 		~FSDHook(
 			VOID
 		) {};
@@ -54,5 +60,6 @@ private:
 
 	PDRIVER_OBJECT pDriverObject;
 	IRP_MJ_SERIES OriFunc;
+	IRP_MJ_SERIES CurerntFunc;
 	SHORT Subscript;
 };

@@ -210,7 +210,7 @@ MessengerDevice<T>::CreateDevice(
 
 		RtlZeroMemory(&UserBuffer, sizeof(UserBuffer));
 
-	ntStatus = DeviceHandler::DeviceHandler(pDriverObject, puniDeviceName, puniSymbolName, ulDeviceExternsionSize, Exclusive);
+	ntStatus = DeviceHandler::CreateDevice(pDriverObject, puniDeviceName, puniSymbolName, ulDeviceExternsionSize, Exclusive);
 	if (!NT_SUCCESS(ntStatus))
 	{
 		PrintErr("创建设备失败! Errorcode:%X\n", ntStatus);
@@ -549,7 +549,7 @@ MessengerDevice<T>::DeleteDevice(
 	RtlZeroMemory(&kKernelEvent, sizeof(KEVENT));
 	RtlZeroMemory(&kUserToKernelEvent, sizeof(KEVENT));
 	RtlZeroMemory(&UserBuffer, sizeof(UserBuffer));
-	bIsCreated = FALSE;
+	//bIsCreated = FALSE;
 	bIsRefuse = FALSE;
 
 	TRY_END(ntStatus)

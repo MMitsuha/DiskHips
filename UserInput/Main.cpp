@@ -74,7 +74,7 @@ main(
 	else
 		RtlCopyMemory(wstrDriverName, L".\\DiskHips_x86.sys", sizeof(L".\\DiskHips_x86.sys"));
 	if (!LoadNTDriver((PWCHAR)L"MH", wstrDriverName))
-		cout << "启动驱动失败! 错误码:" << GetLastError() << endl;
+		cout << "启动驱动失败! 错误码: " << GetLastError() << endl;
 
 	HANDLE hDriver = CreateFileW(USER_MBRHIPS_LINK_NAME, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, 0, 0);
 	if (hDriver != INVALID_HANDLE_VALUE)
@@ -83,7 +83,7 @@ main(
 		DWORD ReturnedLength = 0;
 		list<list<UINT64>> Object;
 		list<UINT64> WarningSectors;
-		cout << "已自动保护:" << flush;
+		cout << "已自动保护: " << flush;
 		if (RecordAllSectors(Object))
 		{
 			for (auto CurrentList : Object)
@@ -95,12 +95,12 @@ main(
 			cout << endl;
 
 			BOOLEAN IsExpert = FALSE;
-			cout << "是否进入专家模式(1 是/0 否):" << flush;
+			cout << "是否进入专家模式(1 是/0 否): " << flush;
 			cin >> IsExpert;
 			if (IsExpert == 49)
 			{
 				cin.clear();
-				cout << "输入你想保护的扇区(空格分隔,Ctrl+Z结束,例子:0 1 2 3^Z<Enter>):" << flush;
+				cout << "输入你想保护的扇区(空格分隔,Ctrl+Z结束,例子:0 1 2 3^Z<Enter>): " << flush;
 				UINT64 WarningSector = -1;
 				while (cin >> WarningSector)
 					WarningSectors.push_back(WarningSector);
