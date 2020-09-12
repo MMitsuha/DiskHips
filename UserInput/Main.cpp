@@ -5,6 +5,7 @@
 #include <algorithm>
 
 HANDLE g_hDriver = INVALID_HANDLE_VALUE;
+BOOLEAN g_IsHide = FALSE;
 
 BOOLEAN
 NtPathToDosPathW(
@@ -115,7 +116,8 @@ WarningThread(
 				UserChoose.bIsDenied = FALSE;
 	}
 	delete pUserBuffer;
-	ShowWindow(hWnd, SW_HIDE);
+	if (g_IsHide == 49)
+		ShowWindow(hWnd, SW_HIDE);
 	return DeviceIoControl(g_hDriver, WRITE_DISKHIPS_DATA, &UserChoose, sizeof(UserChoose), NULL, 0, &ReturnedLength, NULL);
 }
 
@@ -157,22 +159,30 @@ main(
 				}
 			cout << endl;
 
+			cin.clear();
 			BOOLEAN IsExpert = FALSE;
 			cout << "是否进入专家模式(1 是/0 否): " << flush;
 			cin >> IsExpert;
+			cin.clear();
 			if (IsExpert == 49)
 			{
 				cin.clear();
-				cout << "输入你想保护的扇区(空格分隔,Ctrl+Z结束,例子:0 1 2 3^Z<Enter>): " << flush;
+				cout << "输入你想保护的扇区(空格分隔,Ctrl+Z结束,例子:0 1 2 3<Enter>): " << flush;
 				istream_iterator<UINT64> cin_iter(cin), eof;
 				while (cin_iter != eof)
 					WarningSectors.push_back(*cin_iter++);
 				cout << endl;
 				cin.clear();
-				cin.get();
 			}
-			HWND hWnd = GetConsoleWindow();
-			ShowWindow(hWnd, SW_HIDE);
+			cin.clear();
+			cout << "是否隐藏窗口(1 是/0 否): " << flush;
+			cin >> g_IsHide;
+			cin.clear();
+			if (g_IsHide == 49)
+			{
+				HWND hWnd = GetConsoleWindow();
+				ShowWindow(hWnd, SW_HIDE);
+			}
 			for (auto CurrentSector : WarningSectors)
 			{
 				BOOL bStatus = DeviceIoControl(g_hDriver, ADD_DENY_SECTOR, &CurrentSector, sizeof(CurrentSector), NULL, 0, &ReturnedLength, NULL);
