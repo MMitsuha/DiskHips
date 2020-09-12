@@ -105,7 +105,7 @@ DeviceHandler::DeleteDevice(
 
 DeviceHandler::DeviceHandler(
 	IN DeviceHandler&& Device
-)
+) noexcept
 {
 	pDeviceObject = Device.pDeviceObject;
 	Device.pDeviceObject = NULL;
@@ -118,7 +118,7 @@ DeviceHandler::DeviceHandler(
 DeviceHandler&
 DeviceHandler::operator=(
 	IN DeviceHandler&& Device
-	)
+	) noexcept
 {
 	if (this != &Device)
 	{
@@ -133,10 +133,9 @@ DeviceHandler::operator=(
 	return *this;
 }
 
-PDEVICE_OBJECT
-DeviceHandler::GetDeviceObject(
+DeviceHandler::operator PDEVICE_OBJECT(
 	VOID
-)
+) const noexcept
 {
 	return pDeviceObject;
 }
@@ -149,21 +148,20 @@ DeviceHandler::WriteDeviceExternsion(
 {
 	TRY_START
 
-		RtlCopyMemory(pDeviceObject->DeviceExtension, Data, Size);
+		RtlCopyMemory(Data, pDeviceObject->DeviceExtension, Size);
 
 	TRY_END_NOSTATUS
 }
 
-template<typename T>
-inline
 VOID
-DeviceHandler::WriteDeviceExternsion(
-	IN T& Data
+DeviceHandler::ReadDeviceExternsion(
+	OUT PVOID Data,
+	IN ULONG Size
 )
 {
 	TRY_START
 
-		RtlCopyMemory(pDeviceObject->DeviceExtension, &Data, sizeof(T));
+		RtlCopyMemory(pDeviceObject->DeviceExtension, Data, Size);
 
 	TRY_END_NOSTATUS
 }

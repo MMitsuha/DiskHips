@@ -34,7 +34,7 @@ public:
 
 	DeviceHandler(
 		IN DeviceHandler&& Device
-	);
+	) noexcept;
 
 	DeviceHandler&
 		operator=(
@@ -44,12 +44,11 @@ public:
 	DeviceHandler&
 		operator=(
 			IN DeviceHandler&& Device
-			);
+			) noexcept;
 
-	PDEVICE_OBJECT
-		GetDeviceObject(
-			VOID
-		);
+	operator PDEVICE_OBJECT(
+		VOID
+	) const noexcept;
 
 	VOID
 		WriteDeviceExternsion(
@@ -60,7 +59,31 @@ public:
 	template<typename T>
 	VOID
 		WriteDeviceExternsion(
-			IN T& Data
+			IN CONST T& Data
+		);
+
+	template<typename T>
+	VOID
+		WriteDeviceExternsion(
+			IN CONST T* CONST Data
+		);
+
+	VOID
+		ReadDeviceExternsion(
+			OUT PVOID Data,
+			IN ULONG Size
+		);
+
+	template<typename T>
+	VOID
+		ReadDeviceExternsion(
+			OUT T& Data
+		);
+
+	template<typename T>
+	VOID
+		ReadDeviceExternsion(
+			OUT CONST T* Data
 		);
 
 	virtual
@@ -79,4 +102,54 @@ private:
 	BOOLEAN bSymbolCreated = FALSE;
 };
 
-typedef DeviceHandler* PDeviceHandler;
+template<typename T>
+VOID
+DeviceHandler::WriteDeviceExternsion(
+	IN CONST T& Data
+)
+{
+	TRY_START
+
+		RtlCopyMemory(&Data, pDeviceObject->DeviceExtension, sizeof(Data));
+
+	TRY_END_NOSTATUS
+}
+
+template<typename T>
+VOID
+DeviceHandler::WriteDeviceExternsion(
+	IN CONST T* CONST Data
+)
+{
+	TRY_START
+
+		RtlCopyMemory(Data, pDeviceObject->DeviceExtension, sizeof(T));
+
+	TRY_END_NOSTATUS
+}
+
+template<typename T>
+VOID
+DeviceHandler::ReadDeviceExternsion(
+	OUT T& Data
+)
+{
+	TRY_START
+
+		RtlCopyMemory(pDeviceObject->DeviceExtension, &Data, sizeof(Data));
+
+	TRY_END_NOSTATUS
+}
+
+template<typename T>
+VOID
+DeviceHandler::ReadDeviceExternsion(
+	OUT CONST T* Data
+)
+{
+	TRY_START
+
+		RtlCopyMemory(pDeviceObject->DeviceExtension, Data, sizeof(T));
+
+	TRY_END_NOSTATUS
+}

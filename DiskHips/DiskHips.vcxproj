@@ -271,12 +271,14 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="DeviceHandler.cpp" />
+    <ClCompile Include="DiskHandler.cpp" />
     <ClCompile Include="FSDHook.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="UsingCPP.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DeviceHandler.hpp" />
+    <ClInclude Include="DiskHandler.hpp" />
     <ClInclude Include="ErrorCode.hpp" />
     <ClInclude Include="FSDHook.hpp" />
     <ClInclude Include="Includes.hpp" />

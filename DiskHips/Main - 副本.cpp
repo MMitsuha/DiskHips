@@ -17,12 +17,6 @@ typedef NTSTATUS(*IRP_MJ_SERIES)
 	IN PIRP pIrp
 	);
 
-typedef struct _IRP_INFORMATION
-{
-	PDEVICE_OBJECT pDeviceObject;
-	PIRP pIrp;
-} IRP_INFORMATION, * PIRP_INFORMATION;
-
 EXTERN_C_START
 
 NTSTATUS
@@ -96,28 +90,8 @@ MessengerDevice<USER_BUFFER> g_DeviceObject;
 //IRP_MJ_SERIES g_OriDiskFunc = NULL;
 FSDHook g_DiskObject;
 vector<UINT64> WarningSectors;
-vector<IRP_INFORMATION> PendingIrp;
 
 UNICODE_STRING g_uniDiskName = RTL_CONSTANT_STRING(L"\\Driver\\Disk");
-
-VOID
-CancelRoutine(
-	IN PDEVICE_OBJECT DeviceObject,
-	IN PIRP pIrp
-)
-{
-	TRY_START
-
-		for (auto iter = PendingIrp.begin(); iter != PendingIrp.end(); ++iter)
-			if ((*iter).pIrp == pIrp)
-				PendingIrp.erase(iter);
-
-	pIrp->IoStatus.Status = STATUS_ACCESS_DENIED;
-	IoCompleteRequest(pIrp, IO_NO_INCREMENT);
-	IoReleaseCancelSpinLock(pIrp->CancelIrql);
-
-	TRY_END_NOSTATUS
-}
 
 NTSTATUS
 StartProtectDisk(
@@ -181,8 +155,6 @@ CloseDispatch(
 		ntStatus = g_DiskObject.StopHook();
 	if (!NT_SUCCESS(ntStatus))
 		PrintErr("»Ø¹ö²Ù×÷Ê§°Ü! ´íÎóÂë:%X\n", ntStatus);
-	for (auto iter = PendingIrp.begin(); iter != PendingIrp.end(); ++iter)
-		CancelRoutine((*iter).pDeviceObject, (*iter).pIrp);
 
 	g_DeviceObject.ResetAllStatus();
 
@@ -253,9 +225,19 @@ FilterFunction(
 				break;
 			}
 
+			/*
+			PUNICODE_STRING puniDeviceName = NULL;
+			POBJECT_HEADER ObjectHeader = OBJECT_TO_OBJECT_HEADER(pDeviceObject);
+			if (ObjectHeader)
+			{
+				POBJECT_HEADER_NAME_INFO ObjectNameInfo = OBJECT_HEADER_TO_NAME_INFO(ObjectHeader);
+				if (ObjectNameInfo && ObjectNameInfo->Name.Buffer)
+					puniDeviceName = &ObjectNameInfo->Name;
+			}
+			*/
+
 			if (hProc == (HANDLE)4 || hProc == (HANDLE)0)
 			{
-#if _DEBUG
 				g_DeviceObject.WaitForSelfLock();
 
 				USER_BUFFER UserBuffer = { 0 };
@@ -267,13 +249,9 @@ FilterFunction(
 
 				UserBuffer.Offset = IrpSp->Parameters.Write.ByteOffset.QuadPart;
 				UserBuffer.Length = IrpSp->Parameters.Write.Length;
-				UserBuffer.pIrp = pIrp;
 
 				g_DeviceObject.WriteData(&UserBuffer);
 				g_DeviceObject.SetKernelToUser();
-#else
-				return g_DiskObject.CallOriFunc(pDeviceObject, pIrp);
-#endif // _DEBUG
 			}
 			else
 			{
@@ -281,18 +259,18 @@ FilterFunction(
 				while (!bIsFound)
 				{
 					DWORD dwNeedSize = 0;
+					PVOID pBuffer = NULL;
 					ntStatus = ZwQuerySystemInformation(SystemProcessesAndThreadsInformation, NULL, 0, &dwNeedSize);
 					if (ntStatus == STATUS_INFO_LENGTH_MISMATCH)
 					{
-						PVOID pBuffer = ExAllocatePoolWithTag(NonPagedPool, dwNeedSize, 'WK');
+						pBuffer = ExAllocatePoolWithTag(NonPagedPool, dwNeedSize, 'WK');
 						if (pBuffer)
 						{
 							ntStatus = ZwQuerySystemInformation(SystemProcessesAndThreadsInformation, pBuffer, dwNeedSize, NULL);
 							if (NT_SUCCESS(ntStatus))
 							{
 								PSYSTEM_PROCESSES pSysProc = (PSYSTEM_PROCESSES)pBuffer;
-								do
-								{
+								do {
 									if (pSysProc->ProcessId == hProc)
 									{
 										g_DeviceObject.WaitForSelfLock();
@@ -308,7 +286,6 @@ FilterFunction(
 
 										UserBuffer.Offset = IrpSp->Parameters.Write.ByteOffset.QuadPart;
 										UserBuffer.Length = IrpSp->Parameters.Write.Length;
-										UserBuffer.pIrp = pIrp;
 
 										g_DeviceObject.WriteData(&UserBuffer);
 										g_DeviceObject.SetKernelToUser();
@@ -318,7 +295,7 @@ FilterFunction(
 										break;
 									}
 
-									pSysProc = (PSYSTEM_PROCESSES)((ULONG_PTR)pSysProc + (ULONG_PTR)pSysProc->NextEntryDelta);
+									pSysProc = (PSYSTEM_PROCESSES)((PBYTE)pSysProc + (UINT64)pSysProc->NextEntryDelta);
 								} while (pSysProc->NextEntryDelta != 0);
 							}
 							ExFreePoolWithTag(pBuffer, 'WK');
@@ -344,6 +321,42 @@ FilterFunction(
 
 			UINT64 Sector = (UINT64)IrpSp->Parameters.Write.ByteOffset.QuadPart / 512;
 
+			/*
+			if (hProc == (HANDLE)4 || hProc == (HANDLE)0)
+				if (puniDeviceName)
+					PrintIfm("[%S] ProcPath:System ,Sector:%I64u ,DeviceName:%wZ ,ProcID:%I64u ,ProcAddr:%p\n",
+						__FUNCTIONW__,
+						Sector,
+						puniDeviceName,
+						(UINT64)hProc,
+						pEProc
+					);
+				else
+					PrintIfm("[%S] ProcPath:System ,Sector:%I64u ,DeviceName:NULL ,ProcID:%I64u ,ProcAddr:%p\n",
+						__FUNCTIONW__,
+						Sector,
+						(UINT64)hProc,
+						pEProc
+					);
+			else
+				if (puniDeviceName)
+					PrintIfm("[%S] ProcPath:%wZ ,Sector:%I64u ,DeviceName:%wZ ,ProcID:%I64u ,ProcAddr:%p\n",
+						__FUNCTIONW__,
+						puniProcImageName,
+						Sector,
+						puniDeviceName,
+						(UINT64)hProc,
+						pEProc
+					);
+				else
+					PrintIfm("[%S] ProcPath:%wZ ,Sector:%I64u ,DeviceName:NULL ,ProcID:%I64u ,ProcAddr:%p\n",
+						__FUNCTIONW__,
+						puniProcImageName,
+						Sector,
+						(UINT64)hProc,
+						pEProc
+					);
+			*/
 			if (hProc == (HANDLE)4 || hProc == (HANDLE)0)
 				PrintIfm("[%S] ProcPath:System ,Sector:%I64u ,ProcID:%I64u ,ProcAddr:%p\n",
 					__FUNCTIONW__,
@@ -360,17 +373,22 @@ FilterFunction(
 					pEProc
 				);
 
+			BOOLEAN bIsRefuse = FALSE;
 			for (auto CurrentSector : WarningSectors)
 			{
 				if (CurrentSector == Sector)
 				{
-					IRP_INFORMATION IrpInformation = { pDeviceObject,pIrp };
-					PendingIrp.push_back(IrpInformation);
-					IoSetCancelRoutine(pIrp, CancelRoutine);
-					IoMarkIrpPending(pIrp);
-					return STATUS_PENDING;
+					g_DeviceObject.WaitForUserToKernel();
+					if (g_DeviceObject.ReadChoose() == 49)
+					{
+						PrintIfm("[%S] ³ÌÐòÊÔÍ¼Ð´½ûÖ¹ÉÈÇø,ÒÑ¾Ü¾ø!\n", __FUNCTIONW__);
+						bIsRefuse = TRUE;
+					}
+					break;
 				}
 			}
+			if (bIsRefuse)
+				break;
 
 			return g_DiskObject.CallOriFunc(pDeviceObject, pIrp);
 		} while (FALSE);
@@ -378,7 +396,6 @@ FilterFunction(
 	__except (1)
 	{
 		PrintErr("[%S] Î´Öª´íÎó! ´íÎóÂë:%X\n", __FUNCTIONW__, GetExceptionCode());
-		g_DeviceObject.ResetAllStatus();
 	}
 	pIrp->IoStatus.Status = STATUS_ACCESS_DENIED;
 	IoCompleteRequest(pIrp, IO_NO_INCREMENT);
@@ -412,6 +429,7 @@ IoControlDispatch(
 		switch (ControlCode)
 		{
 			case READ_DISKHIPS_DATA:
+			{
 				if (OutBufferLength < sizeof(USER_BUFFER))
 				{
 					PrintErr("»º³åÇø¹ýÐ¡!\n");
@@ -421,40 +439,38 @@ IoControlDispatch(
 
 				g_DeviceObject.ReadData((PUSER_BUFFER)SystemBuffer);
 
-				g_DeviceObject.SetSelfLock();
+				BOOLEAN IsFound = FALSE;
+				for (auto CurrentSector : WarningSectors)
+				{
+					if (CurrentSector == (UINT64)g_DeviceObject.ReadData().Offset / 512)
+					{
+						IsFound = TRUE;
+						break;
+					}
+				}
+				if (!IsFound)
+					g_DeviceObject.SetSelfLock();
 
 				Size = sizeof(USER_BUFFER);
 				ntStatus = STATUS_SUCCESS;
-				break;
+			}
+			break;
 
 			case WRITE_DISKHIPS_DATA:
-				if (InBufferLength < sizeof(USER_CHOOSE))
+				if (InBufferLength != sizeof(BOOLEAN))
 				{
 					PrintErr("»º³åÇøÒì³£!\n");
 					ntStatus = STATUS_BUFFER_TOO_SMALL;
 					break;
 				}
 
-				for (auto iter = PendingIrp.begin(); iter != PendingIrp.end(); ++iter)
-					if ((*iter).pIrp == ((PUSER_CHOOSE)SystemBuffer)->pIrp)
-					{
-						if (((PUSER_CHOOSE)SystemBuffer)->bIsDenied)
-						{
-							(*iter).pIrp->IoStatus.Status = STATUS_ACCESS_DENIED;
-							IoCompleteRequest((*iter).pIrp, IO_NO_INCREMENT);
-							ntStatus = STATUS_SUCCESS;
-						}
-						else
-							ntStatus = g_DiskObject.CallOriFunc((*iter).pDeviceObject, (*iter).pIrp);
+				g_DeviceObject.WriteChoose(*(PBOOLEAN)SystemBuffer);
 
-						PendingIrp.erase(iter);
+				g_DeviceObject.SetUserToKernel();
+				g_DeviceObject.SetSelfLock();
 
-						Size = sizeof(USER_CHOOSE);
-						break;
-					}
-
-				Size = 0;
-				ntStatus = STATUS_INVALID_PARAMETER;
+				Size = sizeof(BOOLEAN);
+				ntStatus = STATUS_SUCCESS;
 				break;
 
 			case ENABLE_DISKHIPS_MONITOR:
@@ -463,8 +479,6 @@ IoControlDispatch(
 
 			case DISABLE_DISKHIPS_MONITOR:
 				ntStatus = g_DiskObject.StopHook();
-				for (auto iter = PendingIrp.begin(); iter != PendingIrp.end(); ++iter)
-					CancelRoutine((*iter).pDeviceObject, (*iter).pIrp);
 				break;
 
 			case ADD_DENY_SECTOR:
