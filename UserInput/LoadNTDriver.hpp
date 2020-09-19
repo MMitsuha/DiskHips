@@ -3,35 +3,35 @@
 
 BOOL
 InstallDriver(
-	IN CONST LPWSTR lpszDriverName,
-	IN CONST LPWSTR lpszDriverPath,
-	IN CONST LPWSTR lpszAltitude
+	IN CONST PWSTR lpszDriverName,
+	IN CONST PWSTR lpszDriverPath,
+	IN CONST PWSTR lpszAltitude
 );
 
 BOOL
 StartDriver(
-	IN CONST PWCHAR lpszDriverName
+	IN CONST PWSTR lpszDriverName
 );
 
 BOOL
 StopDriver(
-	IN CONST PWCHAR lpszDriverName
+	IN CONST PWSTR lpszDriverName
 );
 
 BOOL
 DeleteDriver(
-	IN CONST PWCHAR lpszDriverName
+	IN CONST PWSTR lpszDriverName
 );
 
 //--------上面是加载Filter驱动的,下面是NT驱动--------
 
 BOOL
 LoadNTDriver(
-	IN CONST PWCHAR lpszDriverName,
-	IN CONST PWCHAR lpszDriverPath
+	IN CONST PWSTR lpszDriverName,
+	IN CONST PWSTR lpszDriverPath
 );
 
 BOOL
 UnloadNTDriver(
-	IN CONST PWCHAR szSvrName
+	IN CONST PWSTR szSvrName
 );

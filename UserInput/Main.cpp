@@ -2,10 +2,14 @@
 #include "Functions.hpp"
 #include <list>
 #include <sstream>
+#include <fstream>
 #include <algorithm>
+#include <mutex>
 
 HANDLE g_hDriver = INVALID_HANDLE_VALUE;
 BOOLEAN g_IsHide = FALSE;
+wofstream g_LogFile("Warns.log", ios::app);
+mutex g_Mutex;
 
 BOOLEAN
 NtPathToDosPathW(
@@ -18,7 +22,6 @@ NtPathToDosPathW(
 
 	WCHAR DosDevice[4] = { 0 };       //dos设备名最大长度为4
 	WCHAR NtPath[64] = { 0 };       //nt设备名最大长度为64
-	PWSTR RetStr = NULL;
 	SIZE_T NtPathLen = 0;
 
 	for (SHORT i = 65; i < 26 + 65; i++)
@@ -27,15 +30,12 @@ NtPathToDosPathW(
 		DosDevice[1] = L':';
 		if (QueryDosDeviceW(DosDevice, NtPath, 64))
 		{
-			if (NtPath)
+			NtPathLen = wcsnlen_s(NtPath, 64);
+			if (!wcsncmp(NtPath, FullNtPath, NtPathLen))
 			{
-				NtPathLen = wcsnlen_s(NtPath, 64);
-				if (!wcsncmp(NtPath, FullNtPath, NtPathLen))
-				{
-					wcscpy(FullDosPath, DosDevice);
-					wcscat(FullDosPath, FullNtPath + NtPathLen);
-					return TRUE;
-				}
+				wcscpy(FullDosPath, DosDevice);
+				wcscat(FullDosPath, FullNtPath + NtPathLen);
+				return TRUE;
 			}
 		}
 	}
@@ -84,10 +84,12 @@ WarningThread(
 	HWND hWnd = GetConsoleWindow();
 	if (hWnd != NULL)
 	{
+		/*
 		SetForegroundWindow(hWnd);
 		BringWindowToTop(hWnd);
 		SetActiveWindow(hWnd);
 		SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+		*/
 		//cout << "是否拦截(1 拦截/0 放行):" << flush;
 		//cin >> IsRebused;
 		wstringstream Info;
@@ -111,9 +113,43 @@ WarningThread(
 		Info << L"长度(字节): " << pUserBuffer->Length << endl;
 		Info << L"Irp地址: " << pUserBuffer->pIrp << endl << endl;
 		Info << L"(Yes: 拦截/No: 放行)" << flush;
+
+		if (!g_LogFile.fail())
+		{
+			g_Mutex.lock();
+			g_LogFile << L"------------------------------" << endl;
+			if (pUserBuffer->hProcID == (HANDLE)0 || pUserBuffer->hProcID == (HANDLE)4)
+				g_LogFile << "进程名: " << "System" << endl;
+			else
+				g_LogFile << "进程名: " << pUserBuffer->wstrProcessName << endl;
+			g_LogFile << L"PID: " << (UINT64)pUserBuffer->hProcID << endl;
+			if (pUserBuffer->hProcID == (HANDLE)0 || pUserBuffer->hProcID == (HANDLE)4)
+				g_LogFile << "进程路径: " << "System" << endl;
+			else
+			{
+				WCHAR DosPath[MAX_PATH + 4] = { 0 };
+				NtPathToDosPathW(pUserBuffer->wstrNTProcessPath, DosPath);
+				g_LogFile << "进程路径: " << DosPath << endl;
+			}
+			g_LogFile << "相对扇区偏移(字节): " << pUserBuffer->Offset % 512 << endl;
+			g_LogFile << "扇区(512字节): " << pUserBuffer->Offset / 512 << endl;
+			g_LogFile << "长度(字节): " << pUserBuffer->Length << endl;
+			g_LogFile << "Irp地址: " << pUserBuffer->pIrp << endl << endl;
+			g_LogFile << endl;
+			g_Mutex.unlock();
+		}
+		else
+			cerr << "[-] g_LogFile失败!" << endl << endl
+			<< endl;
+
 		if (!Info.fail())
+		{
 			if (MessageBoxW(hWnd, Info.str().c_str(), L"WARNING", MB_ICONWARNING | MB_YESNO | MB_SYSTEMMODAL) == IDNO)
 				UserChoose.bIsDenied = FALSE;
+		}
+		else
+			cerr << "[-] Info失败!" << endl << endl
+			<< endl;
 	}
 	delete pUserBuffer;
 	if (g_IsHide == 49)
@@ -127,12 +163,20 @@ main(
 	_In_ CHAR** argv
 )
 {
+	/*
 	WCHAR wstrDriverName[18] = { 0 };
 	if (GetSystemBits() == 0x64)
 		RtlCopyMemory(wstrDriverName, L".\\DiskHips_x64.sys", sizeof(L".\\DiskHips_x64.sys"));
 	else
 		RtlCopyMemory(wstrDriverName, L".\\DiskHips_x86.sys", sizeof(L".\\DiskHips_x86.sys"));
 	if (!LoadNTDriver((PWCHAR)L"MH", wstrDriverName))
+		cout << "启动驱动失败! 错误码: " << GetLastError() << endl;
+	*/
+#ifdef _WIN64
+	if (!LoadNTDriver((PWSTR)L"MH", (PWSTR)L".\\DiskHips_x64.sys"))
+#else
+	if (!LoadNTDriver((PWSTR)L"MH", (PWSTR)L".\\DiskHips_x86.sys"))
+#endif
 		cout << "启动驱动失败! 错误码: " << GetLastError() << endl;
 
 	g_hDriver = CreateFileW(USER_MBRHIPS_LINK_NAME, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, 0, 0);
@@ -205,7 +249,11 @@ main(
 						{
 							PUSER_BUFFER pUserBuffer = new USER_BUFFER{ 0 };
 							if (pUserBuffer == NULL)
+							{
+								cerr << "[-] 内存分配失败!" << endl << endl
+									<< endl;
 								continue;
+							}
 
 							WaitForSingleObject(hEvent, INFINITE);
 							bRet = DeviceIoControl(g_hDriver, READ_DISKHIPS_DATA, NULL, 0, pUserBuffer, sizeof(*pUserBuffer), &ReturnedLength, NULL);

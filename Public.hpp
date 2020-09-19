@@ -4,6 +4,9 @@
 #define USER_MBRHIPS_LINK_NAME L"\\\\.\\DHLink"
 #define USER_MBRHIPS_EVENT_NAME L"Global\\DHEvent"
 
+#ifdef CTL_CODE
+#undef CTL_CODE
+#endif
 #define CTL_CODE( DeviceType, Function, Method, Access ) (                 \
     ((DeviceType) << 16) | ((Access) << 14) | ((Function) << 2) | (Method) \
 )

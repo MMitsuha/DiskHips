@@ -96,7 +96,7 @@ MessengerDevice<USER_BUFFER> g_DeviceObject;
 //IRP_MJ_SERIES g_OriDiskFunc = NULL;
 FSDHook g_DiskObject;
 vector<UINT64> WarningSectors;
-vector<IRP_INFORMATION> PendingIrp;
+vector<IRP_INFORMATION> g_PendingIrp;
 
 UNICODE_STRING g_uniDiskName = RTL_CONSTANT_STRING(L"\\Driver\\Disk");
 
@@ -108,9 +108,9 @@ CancelRoutine(
 {
 	TRY_START
 
-		for (auto iter = PendingIrp.begin(); iter != PendingIrp.end(); ++iter)
+		for (auto iter = g_PendingIrp.begin(); iter != g_PendingIrp.end(); ++iter)
 			if ((*iter).pIrp == pIrp)
-				PendingIrp.erase(iter);
+				g_PendingIrp.erase(iter);
 
 	pIrp->IoStatus.Status = STATUS_ACCESS_DENIED;
 	IoCompleteRequest(pIrp, IO_NO_INCREMENT);
@@ -181,7 +181,7 @@ CloseDispatch(
 		ntStatus = g_DiskObject.StopHook();
 	if (!NT_SUCCESS(ntStatus))
 		PrintErr("回滚操作失败! 错误码:%X\n", ntStatus);
-	for (auto iter = PendingIrp.begin(); iter != PendingIrp.end(); ++iter)
+	for (auto iter = g_PendingIrp.begin(); iter != g_PendingIrp.end(); ++iter)
 		CancelRoutine((*iter).pDeviceObject, (*iter).pIrp);
 
 	g_DeviceObject.ResetAllStatus();
@@ -235,6 +235,18 @@ FilterFunction(
 				ntStatus = STATUS_INVALID_PARAMETER;
 				break;
 			}
+			HANDLE hProc = PsGetCurrentProcessId();
+			UINT64 Sector = (UINT64)IrpSp->Parameters.Write.ByteOffset.QuadPart / 512;
+			BOOLEAN IsFound = FALSE;
+			for (auto CurrentSector : WarningSectors)
+				if (CurrentSector == Sector)
+					IsFound = TRUE;
+
+#if _DEBUG
+			if ((hProc == (HANDLE)4 || hProc == (HANDLE)0) && !IsFound)
+				return g_DiskObject.CallOriFunc(pDeviceObject, pIrp);
+#endif // _DEBUG
+
 			PEPROCESS pEProc = IoThreadToProcess(pIrp->Tail.Overlay.Thread);
 			if (!pEProc)
 			{
@@ -242,10 +254,7 @@ FilterFunction(
 				ntStatus = STATUS_INVALID_PARAMETER;
 				break;
 			}
-
-			HANDLE hProc = PsGetCurrentProcessId();
 			PUNICODE_STRING puniProcImageName = NULL;
-
 			ntStatus = SeLocateProcessImageName(pEProc, &puniProcImageName);
 			if (!NT_SUCCESS(ntStatus) || !puniProcImageName)
 			{
@@ -255,7 +264,6 @@ FilterFunction(
 
 			if (hProc == (HANDLE)4 || hProc == (HANDLE)0)
 			{
-#if _DEBUG
 				g_DeviceObject.WaitForSelfLock();
 
 				USER_BUFFER UserBuffer = { 0 };
@@ -271,22 +279,39 @@ FilterFunction(
 
 				g_DeviceObject.WriteData(&UserBuffer);
 				g_DeviceObject.SetKernelToUser();
-#else
-				return g_DiskObject.CallOriFunc(pDeviceObject, pIrp);
-#endif // _DEBUG
 			}
 			else
 			{
 				BOOLEAN bIsFound = FALSE;
+				//SIZE_T LastAllocated = 0;
+				//PVOID pBuffer = NULL;
 				while (!bIsFound)
 				{
 					DWORD dwNeedSize = 0;
 					ntStatus = ZwQuerySystemInformation(SystemProcessesAndThreadsInformation, NULL, 0, &dwNeedSize);
 					if (ntStatus == STATUS_INFO_LENGTH_MISMATCH)
 					{
+						/*
+						if (LastAllocated < dwNeedSize || !pBuffer)
+						{
+							PrintIfm("LastAllocated < dwNeedSize 分配内存! 大小:%X", dwNeedSize);
+							if (pBuffer)
+								ExFreePoolWithTag(pBuffer, 'WK');
+							pBuffer = NULL;
+							pBuffer = ExAllocatePoolWithTag(NonPagedPool, dwNeedSize, 'WK');
+							if (!pBuffer)
+								continue;
+							LastAllocated = dwNeedSize;
+						}
+						else
+							PrintIfm("LastAllocated >= dwNeedSize 未分配内存!");
+						*/
 						PVOID pBuffer = ExAllocatePoolWithTag(NonPagedPool, dwNeedSize, 'WK');
+						PrintIfm("ZwQuerySystemInformation 分配内存! 大小:%X", dwNeedSize);
+
 						if (pBuffer)
 						{
+							//LastAllocated = dwNeedSize;
 							ntStatus = ZwQuerySystemInformation(SystemProcessesAndThreadsInformation, pBuffer, dwNeedSize, NULL);
 							if (NT_SUCCESS(ntStatus))
 							{
@@ -342,8 +367,6 @@ FilterFunction(
 					break;
 			}
 
-			UINT64 Sector = (UINT64)IrpSp->Parameters.Write.ByteOffset.QuadPart / 512;
-
 			if (hProc == (HANDLE)4 || hProc == (HANDLE)0)
 				PrintIfm("[%S] ProcPath:System ,Sector:%I64u ,ProcID:%I64u ,ProcAddr:%p\n",
 					__FUNCTIONW__,
@@ -360,16 +383,13 @@ FilterFunction(
 					pEProc
 				);
 
-			for (auto CurrentSector : WarningSectors)
+			if (IsFound)
 			{
-				if (CurrentSector == Sector)
-				{
-					IRP_INFORMATION IrpInformation = { pDeviceObject,pIrp };
-					PendingIrp.push_back(IrpInformation);
-					IoSetCancelRoutine(pIrp, CancelRoutine);
-					IoMarkIrpPending(pIrp);
-					return STATUS_PENDING;
-				}
+				IRP_INFORMATION IrpInformation = { pDeviceObject,pIrp };
+				g_PendingIrp.push_back(IrpInformation);
+				IoSetCancelRoutine(pIrp, CancelRoutine);
+				IoMarkIrpPending(pIrp);
+				return STATUS_PENDING;
 			}
 
 			return g_DiskObject.CallOriFunc(pDeviceObject, pIrp);
@@ -435,7 +455,7 @@ IoControlDispatch(
 					break;
 				}
 
-				for (auto iter = PendingIrp.begin(); iter != PendingIrp.end(); ++iter)
+				for (auto iter = g_PendingIrp.begin(); iter != g_PendingIrp.end(); ++iter)
 					if ((*iter).pIrp == ((PUSER_CHOOSE)SystemBuffer)->pIrp)
 					{
 						if (((PUSER_CHOOSE)SystemBuffer)->bIsDenied)
@@ -447,7 +467,7 @@ IoControlDispatch(
 						else
 							ntStatus = g_DiskObject.CallOriFunc((*iter).pDeviceObject, (*iter).pIrp);
 
-						PendingIrp.erase(iter);
+						g_PendingIrp.erase(iter);
 
 						Size = sizeof(USER_CHOOSE);
 						break;
@@ -463,7 +483,7 @@ IoControlDispatch(
 
 			case DISABLE_DISKHIPS_MONITOR:
 				ntStatus = g_DiskObject.StopHook();
-				for (auto iter = PendingIrp.begin(); iter != PendingIrp.end(); ++iter)
+				for (auto iter = g_PendingIrp.begin(); iter != g_PendingIrp.end(); ++iter)
 					CancelRoutine((*iter).pDeviceObject, (*iter).pIrp);
 				break;
 
@@ -548,7 +568,7 @@ DriverEntry(
 	if (!pDriverObject)
 		return STATUS_INVALID_PARAMETER;
 
-	PrintIfm("驱动已加载,作者:caizhe666.\n");
+	DbgPrint("[*] 驱动已加载,作者:caizhe666.\n");
 
 	NTSTATUS ntStatus = STATUS_UNSUCCESSFUL;
 

@@ -2,9 +2,9 @@
 
 BOOL
 InstallDriver(
-	IN CONST LPWSTR lpszDriverName,
-	IN CONST LPWSTR lpszDriverPath,
-	IN CONST LPWSTR lpszAltitude
+	IN CONST PWSTR lpszDriverName,
+	IN CONST PWSTR lpszDriverPath,
+	IN CONST PWSTR lpszAltitude
 )
 {
 	WCHAR szTempStr[MAX_PATH];
@@ -117,7 +117,7 @@ InstallDriver(
 
 BOOL
 StartDriver(
-	IN CONST PWCHAR lpszDriverName
+	IN CONST PWSTR lpszDriverName
 )
 {
 	SC_HANDLE schManager;
@@ -160,7 +160,7 @@ StartDriver(
 
 BOOL
 StopDriver(
-	IN CONST PWCHAR lpszDriverName
+	IN CONST PWSTR lpszDriverName
 )
 {
 	SC_HANDLE        schManager;
@@ -194,7 +194,7 @@ StopDriver(
 
 BOOL
 DeleteDriver(
-	IN CONST PWCHAR lpszDriverName
+	IN CONST PWSTR lpszDriverName
 )
 {
 	SC_HANDLE        schManager;
@@ -227,8 +227,8 @@ DeleteDriver(
 
 BOOL
 LoadNTDriver(
-	IN CONST PWCHAR lpszDriverName,
-	IN CONST PWCHAR lpszDriverPath
+	IN CONST PWSTR lpszDriverName,
+	IN CONST PWSTR lpszDriverPath
 )
 {
 	WCHAR szDriverImagePath[MAX_PATH];
@@ -327,7 +327,7 @@ BeforeLeave:
 //Ð¶ÔØÇý¶¯³ÌÐò
 BOOL
 UnloadNTDriver(
-	IN CONST PWCHAR szSvrName
+	IN CONST PWSTR szSvrName
 )
 {
 	BOOL bRet = FALSE;
